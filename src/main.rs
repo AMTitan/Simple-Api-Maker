@@ -87,7 +87,14 @@ fn main() {
                     };
                     DB.save();
                 }
-            } else if File::open(format!("./www/{}", wants)).is_ok() {
+            } 
+            else if wants.starts_with("backend/") {
+                if wants[8..] == *"list" {
+                    let _ = DB.read(|db| {
+                        stream.write(format!("HTTP/1.1 200 Ok\r\nContent-length: {}\r\n\r\n{}",format!("{:?}", db).len(), format!("{:?}", db)).as_bytes()).unwrap();
+                    });
+                }
+            }else if File::open(format!("./www/{}", wants)).is_ok() {
                 let mut f = File::open(format!("./www/{}", wants)).unwrap();
                 let mut buffer = Vec::new();
                 for i in format!(
@@ -99,6 +106,7 @@ fn main() {
                     buffer.push(*i);
                 }
                 f.read_to_end(&mut buffer).expect("buffer overflow");
+                stream.write(&buffer).unwrap();
             } else {
                 stream.write(b"HTTP/1.1 400 Bad Request\r\n\r\n").unwrap();
             }
