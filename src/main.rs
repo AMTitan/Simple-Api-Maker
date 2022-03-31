@@ -108,7 +108,7 @@ fn main() {
                 f.read_to_end(&mut buffer).expect("buffer overflow");
                 stream.write(&buffer).unwrap();
             } else {
-                stream.write(b"HTTP/1.1 400 Bad Request\r\n\r\n").unwrap();
+                stream.write(b"HTTP/1.1 404 Not Found\r\n\r\n").unwrap();
             }
             stream.flush().unwrap();
         });

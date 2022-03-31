@@ -1,12 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple Api Maker</title>
+    <link rel="stylesheet" href="compacted_style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
+
 <body>
     <script src="/main.js"></script>
+    <div id="admin" class="hidden">
+
+    </div>
+    <div id="normal" class="bg-slate-900 w-screen h-screen">
+        <div class="absolute w-96 left-0 h-screen border-r-2 border-solid border-slate-700">
+            <div id="endpoints" class="m-6 text-slate-300 overflow-hidden overflow-ellipsis">
+                <strong class="ml-2">API List</strong>
+                <div class="m-4"></div>
+            </div>
+        </div>
+        <div class="absolute w-[calc(100vw-386px)] right-0 h-screen text-slate-300">
+            <p id="name" class="text-center mt-20 text-6xl">Loading...</p>
+            <div class="w-[50%] m-auto">
+                <div class="mt-24"></div>
+                <p>Url: <a id="url" class="" href="http://www.google.com" target="_new">Loading...</a></p>
+                <div class="m-5"></div>
+                <p>Example response:</p>
+                <div class="m-2"></div>
+                <div class="rounded-md bg-gray-800 min-h-[6rem] w-full">
+                    <p id="response" class="m-1">
+                        Loading...
+                    </p>
+
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
+
 </html>
