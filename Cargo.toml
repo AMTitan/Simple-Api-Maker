@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 rustbreak = {version = "2", features = ["ron_enc"]}
 lazy_static = "1.4.0"
+fancy-regex = "0.8.0"

@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+use fancy_regex::Regex;
 use rustbreak::backend::FileBackend;
 use rustbreak::deser::Ron;
 use rustbreak::Database;
@@ -37,13 +38,27 @@ fn main() {
                 wants = "/index.html".to_string();
             }
             wants = wants[1..].to_string();
-            println!("{} made a request for {}", stream.local_addr().unwrap().to_string().split(':').nth(0).unwrap(), wants);
+            println!(
+                "{} made a request for {}",
+                stream
+                    .local_addr()
+                    .unwrap()
+                    .to_string()
+                    .split(':')
+                    .nth(0)
+                    .unwrap(),
+                wants
+            );
             if wants.starts_with("api/") {
                 match get_item(wants[4..].to_string()) {
                     Ok(x) => {
                         let _ = DB.read(|db| {
                             stream
-                                .write(&get_response(x.clone(), db.get(&x).unwrap().to_string()))
+                                .write(&get_response(
+                                    x.clone(),
+                                    wants[4..].to_string(),
+                                    db.get(&x).unwrap().to_string(),
+                                ))
                                 .unwrap();
                         });
                     }
@@ -61,15 +76,16 @@ fn main() {
                     .unwrap()
                     == "127.0.0.1"
             {
-                if wants[6..].starts_with("create/") {
-                    if wants[13..].to_string().split(':').count() != 2 {
+                if wants[6..].starts_with("create/") || wants[6..].starts_with("edit/") {
+                    if input.split("\r\n\r\n").nth(1).unwrap().len() == 0 {
                         stream.write(b"HTTP/1.1 400 Bad Request\r\n\r\n").unwrap();
-                    }
-                    else {
+                    } else {
                         match DB.write(|db| {
                             db.insert(
-                                wants[13..].to_string().split(':').nth(0).unwrap().into(),
-                                wants[13..].to_string().split(':').nth(1).unwrap().into(),
+                                wants[13..].to_string(),
+                                {
+                                    input.split("\r\n\r\n").nth(1).unwrap().to_string()
+                                },
                             );
                         }) {
                             Ok(_) => stream.write(b"HTTP/1.1 200 Ok\r\n\r\n").unwrap(),
@@ -77,8 +93,7 @@ fn main() {
                         };
                         DB.save();
                     }
-                }
-                else if wants[6..].starts_with("delete/") {
+                } else if wants[6..].starts_with("delete/") {
                     match DB.write(|db| {
                         db.remove(&wants[13..].to_string())
                     }) {
@@ -87,15 +102,36 @@ fn main() {
                     };
                     DB.save();
                 }
-            } 
-            else if wants.starts_with("backend/") {
+            } else if wants.starts_with("backend/") {
                 if wants[8..] == *"list" {
                     let _ = DB.read(|db| {
-                        stream.write(format!("HTTP/1.1 200 Ok\r\nContent-length: {}\r\n\r\n{}",format!("{:?}", db).len(), format!("{:?}", db)).as_bytes()).unwrap();
+                        stream
+                            .write(
+                                format!(
+                                    "HTTP/1.1 200 Ok\r\nContent-length: {}\r\n\r\n{}",
+                                    format!("{:?}", db).len(),
+                                    format!("{:?}", db)
+                                )
+                                .as_bytes(),
+                            )
+                            .unwrap();
                     });
                 }
-            }else if File::open(format!("./www/{}", wants)).is_ok() {
+            } else if File::open(format!("./www/{}", wants)).is_ok() {
                 let mut f = File::open(format!("./www/{}", wants)).unwrap();
+                let mut buffer = Vec::new();
+                for i in format!(
+                    "HTTP/1.1 200 Ok\r\nContent-length: {}\r\n\r\n",
+                    f.metadata().unwrap().len()
+                )
+                .as_bytes()
+                {
+                    buffer.push(*i);
+                }
+                f.read_to_end(&mut buffer).expect("buffer overflow");
+                stream.write(&buffer).unwrap();
+            } else if File::open(format!("./assets/{}", wants)).is_ok() {
+                let mut f = File::open(format!("./assets/{}", wants)).unwrap();
                 let mut buffer = Vec::new();
                 for i in format!(
                     "HTTP/1.1 200 Ok\r\nContent-length: {}\r\n\r\n",
@@ -116,21 +152,86 @@ fn main() {
 }
 
 fn get_item(wants: String) -> Result<String, String> {
-    if DB.read(|db| {
-        db.get(&wants).is_some()
-    }).unwrap() {
+    if DB.read(|db| db.get(&wants).is_some()).unwrap() {
         Ok(wants)
-    }
-    else {
-        Err("Not implemented".to_string())
+    } else {
+        DB.read(|db| {
+            let mut could_be = Vec::new();
+            for (x, y) in db {
+                could_be.push(x);
+            }
+            for i in 0..wants.split("/").count() {
+                let mut offset = 0;
+                for x in 0..could_be.len() {
+                    if !(could_be[x - offset].split("/").nth(i).is_some()
+                        && could_be[x - offset].split("/").nth(i).unwrap()
+                            == wants.split("/").nth(i).unwrap()
+                        || (could_be[x - offset].split("/").nth(i).is_some()
+                            && could_be[x - offset]
+                                .split("/")
+                                .nth(i)
+                                .unwrap()
+                                .contains("$")
+                            && wants.split("/").nth(i).unwrap().starts_with(
+                                could_be[x - offset]
+                                    .split("/")
+                                    .nth(i)
+                                    .unwrap()
+                                    .split("$")
+                                    .nth(0)
+                                    .unwrap(),
+                            )))
+                    {
+                        could_be.remove(x - offset);
+                        offset += 1;
+                    }
+                }
+            }
+            if could_be.len() != 0 {
+                Ok(could_be[0].to_string())
+            } else {
+                Err("Not Found".to_string())
+            }
+        })
+        .unwrap()
     }
 }
 
-fn get_response(endpoint: String, Returns: String) -> Vec<u8> {
-    if !Returns.contains('$') && !endpoint.contains('$') {
-        format!("HTTP/1.1 200 Ok\r\nConent-length: {}\r\n\r\n{}", Returns.len(), Returns).as_bytes().to_vec()
-    }
-    else {
-        Vec::new()
+fn get_response(endpoint: String, send_endpoint: String, mut returns: String) -> Vec<u8> {
+    if !returns.contains('$') && !endpoint.contains('$') {
+        format!(
+            "HTTP/1.1 200 Ok\r\nConent-length: {}\r\n\r\n{}",
+            returns.len(),
+            returns
+        )
+        .as_bytes()
+        .to_vec()
+    } else {
+        let mut variables: HashMap<String, String> = HashMap::new();
+        if endpoint.contains("$") {
+            let re = Regex::new(r"\$[^\/]+").unwrap();
+            let mut offset = 0;
+            for i in re.captures_iter(&endpoint) {
+                let name = i.as_ref().unwrap().get(0).unwrap().as_str();
+                let equals = send_endpoint[i.as_ref().unwrap().get(0).unwrap().start() + offset..]
+                    .split("/")
+                    .nth(0)
+                    .unwrap();
+                offset += equals.len() - name.len();
+                variables.insert(name.to_string(), equals.to_string());
+            }
+        }
+        if returns.contains("$") {
+            for (x, y) in variables {
+                returns = returns.replace(&x, &y);
+            }
+        }
+        format!(
+            "HTTP/1.1 200 Ok\r\nConent-length: {}\r\n\r\n{}",
+            returns.len(),
+            returns
+        )
+        .as_bytes()
+        .to_vec()
     }
 }
