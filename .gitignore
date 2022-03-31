@@ -17,3 +17,5 @@ Cargo.lock
 main.ron
 
 /assets/*
+
+Config.toml

@@ -1,18 +1,19 @@
 #[macro_use]
 extern crate lazy_static;
 
-use std::path::Path;
-use rand::prelude::IteratorRandom;
 use fancy_regex::Regex;
+use rand::prelude::IteratorRandom;
+use rand::prelude::SliceRandom;
 use rustbreak::backend::FileBackend;
 use rustbreak::deser::Ron;
 use rustbreak::Database;
 use rustbreak::FileDatabase;
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::fs;
+use std::path::Path;
 use std::thread;
 use toml::Value;
 
@@ -20,14 +21,18 @@ lazy_static! {
     static ref DB: Database<HashMap<String, String>, FileBackend, rustbreak::deser::Ron> =
         FileDatabase::<HashMap<String, String>, Ron>::load_from_path_or_default("main.ron")
             .unwrap();
-    static ref CONFIG: Value = fs::read_to_string("Config.toml").unwrap_or("".to_string()).parse::<Value>().unwrap();
+    static ref CONFIG: Value = fs::read_to_string("Config.toml")
+        .unwrap_or("".to_string())
+        .parse::<Value>()
+        .unwrap();
 }
 
 fn main() {
     if !Path::new("Config.toml").exists() {
         println!("\x1b[31mERROR: you need a Config.toml file and you don't have one, I made one for you so can you please edit it and run this again.\x1b[0m");
         let mut file = File::create("Config.toml").unwrap();
-        file.write_all(b"domain = \'http://example.com\' # this can be an ip or a domain").unwrap();
+        file.write_all(b"domain = \'http://example.com\' # this can be an ip or a domain")
+            .unwrap();
         std::process::exit(1);
     }
     println!("This is a simple api maker, please go to http://127.0.0.1 to create an endpoint");
@@ -141,8 +146,8 @@ fn main() {
                 }
                 f.read_to_end(&mut buffer).expect("buffer overflow");
                 stream.write(&buffer).unwrap();
-            } else if File::open(format!("./assets/{}", wants)).is_ok() {
-                let mut f = File::open(format!("./assets/{}", wants)).unwrap();
+            } else if File::open(format!("./assets/{}", wants[7..].to_string())).is_ok() {
+                let mut f = File::open(format!("./assets/{}", wants[7..].to_string())).unwrap();
                 let mut buffer = Vec::new();
                 for i in format!(
                     "HTTP/1.1 200 Ok\r\nContent-length: {}\r\n\r\n",
@@ -237,19 +242,62 @@ fn get_response(endpoint: String, send_endpoint: String, mut returns: String) ->
                 returns = returns.replace(&x, &y);
             }
             while returns.contains("$") {
-                let re = Regex::new(r"\$[^\/]+\([^\/()]+\)").unwrap();
-                let mut offset = 0;
-                for i in re.captures_iter(&endpoint) {
+                let re = Regex::new(r"\$[^\/()]+\([^\/()]*\)").unwrap();
+                let mut last_end = 0;
+                let mut new_returns = "".to_string();
+                for i in re.captures_iter(&returns.clone()) {
                     let cont = i.as_ref().unwrap().get(0).unwrap().as_str();
                     let replace_with = match &cont.split("(").nth(0).unwrap()[1..] {
                         "RFolder" => {
-                            let paths = fs::read_dir(format!("./assets/{}", cont.split("(").nth(1).unwrap()[..1].to_string())).unwrap();
-                            let file = paths.choose(&mut rand::thread_rng()).unwrap().unwrap().path().display().to_string().split(&cont.split("(").nth(1).unwrap()[..1]).last().unwrap();
-                            format!("{}/api/{}{}", CONFIG["domain"].as_str().unwrap(), cont.split("(").nth(1).unwrap()[..1].to_string(), file)
-                        },
-                        _ => "".to_string()
+                            let paths = fs::read_dir(format!(
+                                "./assets/{}",
+                                cont.split("(").nth(1).unwrap()
+                                    [..cont.split("(").nth(1).unwrap().len() - 1]
+                                    .to_string()
+                            ))
+                            .unwrap();
+                            let mut file = paths
+                                .choose(&mut rand::thread_rng())
+                                .unwrap()
+                                .unwrap()
+                                .path()
+                                .display()
+                                .to_string();
+                            file = file
+                                .split(&cont.split("(").nth(1).unwrap()[..1])
+                                .last()
+                                .unwrap()
+                                .to_string();
+                            format!(
+                                "{}/assets/{}{}",
+                                CONFIG["domain"].as_str().unwrap(),
+                                cont.split("(").nth(1).unwrap()
+                                    [..cont.split("(").nth(1).unwrap().len() - 1]
+                                    .to_string(),
+                                file[9..].to_string()
+                            )
+                        }
+                        "RLine" => {
+                            let cont = fs::read_to_string(format!(
+                                "./assets/{}",
+                                cont.split("(").nth(1).unwrap()
+                                    [..cont.split("(").nth(1).unwrap().len() - 1]
+                                    .to_string()
+                            ))
+                            .unwrap();
+                            let lines: Vec<&str> = cont.lines().collect();
+                            lines.choose(&mut rand::thread_rng()).unwrap().to_string()
+                        }
+                        _ => "".to_string(),
                     };
+                    new_returns.push_str(
+                        &returns[last_end..i.as_ref().unwrap().get(0).unwrap().start()],
+                    );
+                    new_returns.push_str(&replace_with);
+                    last_end = i.as_ref().unwrap().get(0).unwrap().end();
                 }
+                new_returns.push_str(&returns[last_end..returns.len()]);
+                returns = new_returns.to_string();
             }
         }
         format!(
@@ -262,6 +310,4 @@ fn get_response(endpoint: String, send_endpoint: String, mut returns: String) ->
     }
 }
 
-fn get_cont(conts: String) {
-
-}
+fn get_cont(conts: String) {}
