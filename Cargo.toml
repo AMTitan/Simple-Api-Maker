@@ -9,3 +9,5 @@ edition = "2021"
 rustbreak = {version = "2", features = ["ron_enc"]}
 lazy_static = "1.4.0"
 fancy-regex = "0.8.0"
+rand = "0.8.5"
+toml = "0.5.8"
