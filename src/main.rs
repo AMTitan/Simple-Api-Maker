@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
+use std::process::Command;
 use std::thread;
 use toml::Value;
 
@@ -288,11 +289,23 @@ fn get_response(endpoint: String, send_endpoint: String, mut returns: String) ->
                             let lines: Vec<&str> = cont.lines().collect();
                             lines.choose(&mut rand::thread_rng()).unwrap().to_string()
                         }
+                        "Exec" => {
+                            let cont = cont.split("(").nth(1).unwrap()
+                                [..cont.split("(").nth(1).unwrap().len() - 1]
+                                .to_string();
+                            let mut commands: Vec<&str> = cont.split(" ").collect();
+                            let first = commands[0];
+                            commands.remove(0);
+                            let output = Command::new(first)
+                                .args(commands)
+                                .output()
+                                .expect("failed to execute process");
+                            String::from_utf8_lossy(&output.stdout).to_string()
+                        }
                         _ => "".to_string(),
                     };
-                    new_returns.push_str(
-                        &returns[last_end..i.as_ref().unwrap().get(0).unwrap().start()],
-                    );
+                    new_returns
+                        .push_str(&returns[last_end..i.as_ref().unwrap().get(0).unwrap().start()]);
                     new_returns.push_str(&replace_with);
                     last_end = i.as_ref().unwrap().get(0).unwrap().end();
                 }
